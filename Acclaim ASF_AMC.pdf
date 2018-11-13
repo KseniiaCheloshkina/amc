@@ -1,0 +1,51 @@
+<HTML>
+<HEAD>
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=windows-1252">
+<META NAME="Generator" CONTENT="Microsoft Word 97">
+<TITLE>Acclaim ASF/AMC</TITLE>
+<META NAME="Template" CONTENT="E:\applications\office\Office\html.dot">
+</HEAD>
+<BODY LINK="#0000ff" VLINK="#800080">
+
+<B><FONT FACE="Arial" SIZE=4><P>Acclaim ASF/AMC</P>
+</B></FONT><P>Acclaim is a game company which has been doing research into motion capture for games for many years.  They developed their own methods for creating skeleton motion from optical tracker data and subsequently devised a file format, actually two files, for storing the skeleton data.  Later they put the format description in the public domain for anyone to use.  Oxford Metrics, makers of the Vicon motion capture system, elected to use the Acclaim format as the output format of their software.</P>
+<P>The Acclaim format is made up of two files, a skeleton file and a motion file.  This was done knowing that most of the time a single skeleton works for many different motions and rather than storing the same skeleton in each of the motion files it should be stored just once in another file.  The skeleton file is the ASF file (<U>A</U>cclaim <U>S</U>keleton <U>F</U>ile).  The motion file is the AMC file (<U>A</U>cclaim <U>M</U>otion <U>C</U>apture data).</P>
+<B><FONT FACE="Arial"><P>Parsing the ASF file</P>
+</B></FONT><P>In the ASF file a base pose is defined for the skeleton that is the starting point for the motion data.  Each segment has information regarding the way the segment is to be drawn as well as information that can be used for physical dynamics programs, inverse kinematic programs or skinning programs.  One of the peculiar features of the ASF file is the requirement that there be no gaps in the skeleton. No child can have a non-zero offset from the end of the parent segment.  This has the effect of creating more skeletal segments than are usually found in other file formats. A limitation of the ASF definition is that only one root exist in the scene, this doesn't prevent a file from cleverly containing two skeletons attached to the root but it does make such a construction clumsy.</P>
+<P>Examine the example file "<A HREF="walk.asf">Walk.asf</A>".  In there you will see that keywords in the file all start with a colon ":".  Keywords will either set global values or they will indicate the beginning of a section of data.  </P>
+<P>The <B>":version"</B> keyword indicates the version of the skeleton definition.  This document is for version 1.10.</P>
+<P>The <B>":name"</B> keyword allows the skeleton to be named something other than the file name.</P>
+<P>The <B>":units" </B>keyword denotes a section that defines the units to be used for various types of data.  It also defines default values for other parameter.  Any number of  specifications may be found here, the use of these values are often program specific.  Ideally you should store these values and then write them out again if you make modifications to a file. If you intend to just read the motion data in then you can ignore those values that don't interest you.  In this section you will find the units used for angles and sometimes the default values for mass and length of segments.  </P>
+<P>The <B>":documentation"</B> section allows for the storage of documentation information that will persist from one file creation to the next.  Simple comment information in the file is not guaranteed to be retained if the file is read into memory than saved to another file, possibly with modifications.</P>
+<P>The <B>":root"</B> section defines a special segment of the scene (well, it's special to the way the file format is defined, you can really treat this just like any other segment in all other ways).  This is the root segment of the skeleton hierarchy.  It is much like all the other segments but doesn't contain direction and length information.  The <B>"axis" </B>keyword in the root section defines the rotation order of the root object.  The <B>"order"</B> keyword specifies the channels of motion that are applied to the root and in what order they will appear in the AMC file.  The <B>"position"</B> and <B>"orientation"</B> keywords are each followed by a triplet of numbers indicating the starting position and orientation of the root.  These are typically, but not always, zero.</P>
+<P>The <B>":bonedata" </B>section contains a description of each of the segments in the hierarchy.  These descriptions are for just the segments.  The hierarchy section, which comes next, will describe the parenting organization of the segments.  The segment definition is bracketed by a <B>"begin"</B> and <B>"end"</B> pair of keywords (note the lack of a colon in each keyword).  Within the segment definition you will find:</P>
+
+<UL>
+<B><LI>"id"</B> This is a number which provides a unique id for the segment.  This really isn't necessary since each segment is also named and the name is used for both the hierarchy section and in the AMC file.</LI>
+<B><LI>"name" </B>This gives the name of the segment.  Each segment must have a unique name.  Often you will see segments with similar names such as "hips" and "hips1".  The segments that have numbers at the end will usually be the children of the segment with the same name but no number.  The segments with the numbers are usually there simply to fill the gap between the parent segment and a child segment.  Often the segments with a number at the end will not have any motion capture data.  You don't treat these in any special way, this is just noted as an interesting feature.</LI>
+<B><LI>"direction" </B>This is the direction of the segment.  This defines how the segment should be drawn and it also defines the direction from the parent to the child segment(s).  The direction and length of a segment determine the offset of the child from the parent, if there is a child of the segment.</LI>
+<B><LI>"length" </B> The length of the segment.  With the direction value gives the information needed for drawing the segment.</LI>
+<B><LI>"axis" </B>This gives an axis of rotation for the segment.  By specifying this as a separate value the motion data can be independent of the drawing and hierarchy information.  This is particularly useful for those applications which might provide motion editing tools that are sensitive to gimbal lock.</LI>
+<B><LI>"dof" </B> This stands for "Degrees of Freedom" and specifies the number of motion channels and in what order they appear in the AMC file.  If the dof keyword doesn't appear then the segment doesn’t get any motion data. No translation channels will ever appear here only rotation channels and sometimes a length channel.</LI>
+<B><LI>"limits" </B>This specification provides for putting limits on each of the channels in the dof specification.  For each channel that appears there will be a pair of numbers inside parenthesis indicating the mininum and maximum allowed value for that channel.  This information is not used for interpreting the motion data, this is useful only for those applications which might apply motion editing functions that put limits on rotation.  This also does not say that the data in the AMC file might be limited by the given numbers.</LI></UL>
+
+<B><FONT FACE="Arial"><P>Parsing the AMC file</P>
+</B></FONT><P>The AMC file contains the motion data for a skeleton defined by an ASF file.  The motion data is given a sample at a time.  Each sample consists of a number of lines, a segment per line, containing the data.  The start of a sample is denoted by the sample number alone on a line.  For each segment the segment name appears followed by the numbers in the order specified by the dof keyword in the ASF file.</P>
+<B><FONT FACE="Arial"><P>Interpreting the data</P>
+</B></FONT><P>For each segment it is useful to precalculate some the transformation matrices that will be used to construct a global transform for a segment.  First create a matrix <B>C</B> from the axis using the axis order to determine the order the rotation values are composed.  In the ASF file the order is given left to right so that an order of  "XYZ" is:</P><DIR>
+<DIR>
+
+<P>v<B>M</B> = v<B>XYZ</P></DIR>
+</DIR>
+
+</B><P>Do this same calculation for the root but use the orientation value with the axis order for the root.  After calculating <B>C</B> take the inverse of <B>C, </B>call it<B> Cinv</B>, and save it. </P>
+<P>Next create a matrix <B>B</B> and from the translation offset from the segments parent.  The translation offset is the direction and length of the parent segment.  For the root use the position value.  This concludes the precalculation step.</P>
+<P>When constructing the transformation matrix of motion for a segment first create a matrix, <B>M,</B> of the motion data.  When creating <B>M</B> construct a separate matrix for each dof specification and multiply them together left to right.   Compose the local transform, <B>L</B>, by multiplying <B>M</B> on the left by <B>Cinv</B> and on the right by <B>C</B> then <B>B</B>:</P><DIR>
+<DIR>
+
+<B><P>L = CinvMCB</P></DIR>
+</DIR>
+
+</B><P>Like with other formats create the full transform by traversing the hierarchy and multiplying on the right by each parent in the skeleton.</P>
+</BODY>
+</HTML>
