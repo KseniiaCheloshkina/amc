@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from transforms3d.euler import euler2mat
+from transforms3d.euler import euler2mat, mat2euler
 from mpl_toolkits.mplot3d import Axes3D
 import os
 
@@ -206,7 +206,9 @@ class Joint:
         self.parent = None
         self.children = []
         self.coordinate = None
+        self.norm_coordinate = None
         self.matrix = None
+        self.norm_matrix = None
 
             
     def set_motion(self, motion):
@@ -245,9 +247,31 @@ class Joint:
             
         for child in self.children:
             child.set_motion(motion)
+            
+            
+    def normalize(self):
+        
+        joints = self.to_dict()
+
+        root_coor = joints['root'].coordinate
+        root_orient = joints['root'].matrix
+        root_orient_inv = np.linalg.inv(root_orient)
+
+        all_bones = list(joints.keys())
+
+        for bone in all_bones:
+            ex = joints[bone]
+            ex_coordinate = ex.coordinate
+            ex_matrix = ex.matrix
+
+            ex_coordinate = ex_coordinate - root_coor
+            ex_matrix = np.dot(ex_matrix, root_orient_inv)
+
+            ex.norm_coordinate = ex_coordinate
+            ex.norm_matrix = ex_matrix
 
             
-    def draw(self):
+    def draw(self, draw_norm=True):
         
         joints = self.to_dict()
         fig = plt.figure()
@@ -258,19 +282,29 @@ class Joint:
         ax.set_zlim3d(-20, 40)
 
         xs, ys, zs = [], [], []
+        
         for joint in joints.values():
-            xs.append(joint.coordinate[0, 0])
-            ys.append(joint.coordinate[1, 0])
-            zs.append(joint.coordinate[2, 0])
+            if draw_norm:
+                coord = joint.norm_coordinate
+            else:
+                coord = joint.coordinate
+            xs.append(coord[0, 0])
+            ys.append(coord[1, 0])
+            zs.append(coord[2, 0])
         plt.plot(zs, xs, ys, 'b.')
 
-        for joint in joints.values():
-            child = joint
+        for child in joints.values():
             if child.parent is not None:
                 parent = child.parent
-                xs = [child.coordinate[0, 0], parent.coordinate[0, 0]]
-                ys = [child.coordinate[1, 0], parent.coordinate[1, 0]]
-                zs = [child.coordinate[2, 0], parent.coordinate[2, 0]]
+                if draw_norm:
+                    child_coord = child.norm_coordinate
+                    parent_coord = parent.norm_coordinate
+                else:
+                    child_coord = child.coordinate
+                    parent_coord = parent.coordinate               
+                xs = [child_coord[0, 0], parent_coord[0, 0]]
+                ys = [child_coord[1, 0], parent_coord[1, 0]]
+                zs = [child_coord[2, 0], parent_coord[2, 0]]
                 plt.plot(zs, xs, ys, 'r')
         plt.show()
 
@@ -322,7 +356,9 @@ def test_all(data_path='../data'):
         print('parsing %s' % amc_path)
         motions = parse_amc(amc_path)
         joints['root'].set_motion(motions[0])
-        joints['root'].draw()
+        joints['root'].normalize()
+        joints['root'].draw(draw_norm=True)
+
 
 
 if __name__ == '__main__':
