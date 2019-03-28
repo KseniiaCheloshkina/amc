@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 from transforms3d.euler import euler2mat, mat2euler
 from mpl_toolkits.mplot3d import Axes3D
 import os
+import copy
+import pandas as pd
 
 
 ##### FUNCTIONS FOR READING DATA
@@ -344,7 +346,9 @@ def test_all(data_path='../data'):
     """
     lv0 = data_path
     lv1s = os.listdir(lv0)
-    lv1s.remove('.ipynb_checkpoints')
+    if '.ipynb_checkpoints' in lv1s:
+        lv1s.remove('.ipynb_checkpoints')
+    
     for lv1 in lv1s:
         lv2s = os.listdir('/'.join([lv0, lv1]))
         asf_path = '%s/%s/%s.asf' % (lv0, lv1, lv1)
@@ -358,7 +362,169 @@ def test_all(data_path='../data'):
         joints['root'].set_motion(motions[0])
         joints['root'].normalize()
         joints['root'].draw(draw_norm=True)
+    
+    return joints, motions
 
+
+
+############ FUNCTION FOR COLLECTION OF JOINTS AND MOTIONS DATA OF ONE AMC FRAME INTO DATAFRAME 
+
+def get_one_frame_data(joints, motion):
+    
+    """
+    Parse one frame data to dataframe
+    
+    """
+    
+    joints_nm = list(joints.keys())
+    
+    all_joints = []
+    all_joints_nm = []
+    
+    for joint_nm in joints_nm:
+        
+        joint = joints[joint_nm]
+        
+        # parameters from self
+        coord = joint.coordinate.ravel().tolist()
+        coord_nm = [joint.name + '_coord_' + str(i) for i in range(3)]
+
+        norm_coord = joint.norm_coordinate.ravel().tolist()
+        norm_coord_nm = [joint.name + '_norm_coord_' + str(i) for i in range(3)]
+
+        ax, ay, az = mat2euler(joint.matrix)
+        norm_ax, norm_ay, norm_az = mat2euler(joint.norm_matrix)
+
+        l = joint.length
+        
+        # add to storage
+        all_joints.extend(coord)
+        all_joints_nm.extend(coord_nm)
+        
+        all_joints.extend(norm_coord)
+        all_joints_nm.extend(norm_coord_nm)
+        
+        all_joints.extend([ax, ay, az, norm_ax, norm_ay, norm_az, l])
+        nm_rest = ['angle_0', 'angle_1', 'angle_2', 'norm_angle_0', 'norm_angle_1', 'norm_angle_2', 'length']
+        all_joints_nm.extend([str(joint.name) + "_"+ i for i in nm_rest])
+        
+        
+    # parameters from motion (local)
+    all_pars = []
+    all_nms = []
+
+    for bone, pars in motion.items():
+        all_pars.extend(pars)
+        all_nms.extend([bone + "_motion_" + str(i) for i in range(len(pars))])
+
+    all_joints.extend(all_pars)
+    all_joints_nm.extend(all_nms)
+
+    df = pd.DataFrame(all_joints).T
+    df.columns = all_joints_nm
+        
+    return df
+
+
+############ FUNCTION FOR DATAFRAME CREATION FROM ALL AMC FILES 
+
+def create_dataframe_from_data(all_amc_joints, all_motions):
+    
+    """
+    Get full df of all amc frames
+    """
+    
+    df_all = pd.DataFrame()
+
+    amc_paths = list(all_amc_joints.keys())
+
+    for amc_path in amc_paths:
+        print(amc_path)
+        joints = all_amc_joints[amc_path]
+        motions = all_motions[amc_path]
+
+        n_frames = len(joints)
+
+        for i in range(n_frames):
+
+            j_frame = joints[i]
+            motion = motions[i]
+
+            df = get_one_frame_data(j_frame, motion)
+            df['frame'] = i
+            df['amc_path'] = amc_path
+
+            df_all = pd.concat([df_all, df], axis=0)
+            
+    return df_all
+    
+
+############ FUNCTION TO GET ALL DATA FOR A PERSON  
+
+def get_all_data(person_folder):
+    
+    """
+    Default folder structure:
+        person_folder/person_folder.asf
+        person_folder/person_folder_{01, 02, ...}.amc
+        
+    Input:
+    - person_folder: folder of one person data. Must contain one .asf file and .amc file/files
+    
+    Output:
+    - df: dataframe with one row per frame. Each row contains local motion data, global coordinates and angles, normalized global coordinates and angles, length of bones
+        
+    """
+    
+    # find files
+    person_files = os.listdir(person_folder)
+    amc_paths = []
+    asf_paths = []
+
+    for fl in person_files:
+        if "asf" in fl:
+            asf_paths.append(fl)
+        elif 'amc' in fl:
+            amc_paths.append(fl)
+
+    if len(asf_paths) > 1:
+        raise Exception("More than one asf file found")
+    else:
+        asf_path = person_folder + asf_paths[0]
+    
+    # initialize storage
+    all_amc_joints = {}
+    all_motions = {}
+    
+    # parse asf
+    joints = parse_asf(asf_path)
+    
+    # parse amc
+    for amc_path in amc_paths:
+        
+        amc_joints = []
+        # list of dictionaries
+        motions = parse_amc(person_folder + amc_path)
+        
+        for motion in motions:
+            
+            joints_new = copy.deepcopy(joints)
+            
+            # dictionary
+            joints_new['root'].set_motion(motion)
+            joints_new['root'].normalize()
+            
+            amc_joints.append(joints_new)
+        
+        all_amc_joints[amc_path] = amc_joints
+        all_motions[amc_path] = motions
+    
+    
+    df = create_dataframe_from_data(all_amc_joints, all_motions)
+    
+    df['person'] = asf_path.replace(person_folder, "").replace(".asf, "")
+
+    return df
 
 
 if __name__ == '__main__':
