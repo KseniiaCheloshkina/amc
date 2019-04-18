@@ -522,7 +522,7 @@ def get_all_data(person_folder):
     
     df = create_dataframe_from_data(all_amc_joints, all_motions)
     
-    df['person'] = asf_path.replace(person_folder, "").replace(".asf, "")
+    df['person'] = asf_path.replace(person_folder, "").replace(".asf", "")
 
     return df
 
