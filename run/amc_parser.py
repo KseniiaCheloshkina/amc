@@ -439,7 +439,6 @@ def create_dataframe_from_data(all_amc_joints, all_motions):
     amc_paths = list(all_amc_joints.keys())
 
     for amc_path in amc_paths:
-        print(amc_path)
         joints = all_amc_joints[amc_path]
         motions = all_motions[amc_path]
 
